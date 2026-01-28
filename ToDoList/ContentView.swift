@@ -7,76 +7,109 @@
 
 import SwiftUI
 
+// 1. データの「設計図」を作る
+// 文字(String)だけでなく、IDと完了フラグ(Bool)をセットにする
+// Identifiable: リストで管理しやすくする / Codable: 保存できるようにする / Equatable: 比較できるようにする
+struct Task: Identifiable, Codable, Equatable {
+    var id = UUID()         // タスクごとの背番号（自動発行）
+    var title: String       // タスクの内容
+    var isCompleted: Bool   // 完了したかどうか（true/false）
+}
+
 struct ContentView: View {
-    @State private var tasks: [String] = ["英語の勉強","iOSの勉強","読書"]
-    @State private var newTask: String = "" // 新しくタスクを追加する
-    
-    //データを保存するためのキー
-    let saveKey = "SavedTasks"
+    // データの中身を[Task] に変更！
+    @State private var tasks: [Task] = []
+    @State private var newTaskTitle: String = "" // 変数名を少し分かりやすく変更
+
+    // データの保存キー（形式が変わるのでキーも変えてリセットする）
+    let saveKey = "SavedTasksV2"
     
     var body: some View {
-        NavigationStack{//データが置き換わった時などの画面遷移が可能
-            VStack{//VStackは縦に並べる
-                HStack{//HStackは横に並べる
-                    TextField("新しいタスク", text: $newTask)
+        NavigationStack {
+            VStack {//横に並べる
+                // 入力エリア
+                HStack {//縦に並べる
+                    TextField("新しいタスク", text: $newTaskTitle)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                     
-                    Button(action: addTask){
+                    Button(action: addTask) {
                         Text("追加")
-                            .bold()//太文字にする
-                            .padding(.horizontal)//余白をつける（左右に標準的に）
-                            .padding(.vertical, 8)//余白をつける（上下に8ポイント分）
-                            .background(Color.indigo)//背景に色をつける
+                            .bold()//太文字
+                            .padding(.horizontal)//余白をつける(左右に標準的に)
+                            .padding(.vertical, 8)//余白をつける(8ポイント分)
+                            .background(Color.indigo) //背景に色をつける
                             .foregroundColor(.white)//文字に色をつける
                             .cornerRadius(8)//角に丸みをつける
                     }
-                    .disabled(newTask.isEmpty)//入力欄が空の時にボタンが押せないようにする
+                    .disabled(newTaskTitle.isEmpty)//入力欄が空の時にボタンが押せないようにする
                 }
                 .padding()//余白
                 
-                //リストの表示エリア
-                List{
-                    ForEach(tasks,id:\.self){task in
-                        Text(task)
+                // リストの表示エリア
+                List {
+                    // $tasks と書くことで、リストの中でデータを書き換えられるようにする（バインディング）
+                    ForEach($tasks) { $task in
+                        HStack {
+                            // 2. タップで完了/未完了を切り替えるボタン
+                            Button(action: {
+                                task.isCompleted.toggle() // trueとfalseを反転させる魔法の命令
+                            }) {
+                                // 完了状態によってアイコンを変える
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(task.isCompleted ? .green : .gray)
+                                    .font(.title2)
+                            }
+                            .buttonStyle(PlainButtonStyle()) // リスト全体のタップ判定を防ぐためのおまじない
+
+                            // タスクの文字
+                            Text(task.title)
+                                .font(.system(.body, design: .rounded))
+                                .strikethrough(task.isCompleted) // 完了なら取り消し線をつける
+                                .foregroundColor(task.isCompleted ? .gray : .primary) // 完了なら色を薄くする
+                            
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
                     }
-                        //Foreach:taskからデータを1つずつ取り出す。\.selfは文字自体をidに
-                    //スワイプで削除する機能
+                    // スワイプで削除する機能
                     .onDelete(perform: deleteTask)
                 }
+                .listStyle(.insetGrouped)
             }
             .navigationTitle("ToDoリスト")
             
-            .onAppear{
-                //保存する箱(UserDefaults)からデータを取り出そうとする
-                if let data = UserDefaults.standard.data(forKey: saveKey){
-                    //データがあればそれをJSONとして解読
-                    if let decoded = try? JSONDecoder().decode([String].self, from:data){
-                        tasks = decoded//復元したデータをtasksに入れる
+            // 起動時のデータ読み込み
+            .onAppear {
+                if let data = UserDefaults.standard.data(forKey: saveKey) {
+                    // [String] ではなく [Task] として読み込む
+                    if let decoded = try? JSONDecoder().decode([Task].self, from: data) {
+                        tasks = decoded
                     }
                 }
             }
-            //データの保存部分
-            .onChange(of: tasks){
-                //tasksの中身に変化があったか監視　↓tasksを保存できる形式に変換(encode)
-                if let encoded = try? JSONEncoder().encode(tasks){
-                    //変換したデータを箱(UserDefaults)に書き込む
-                    UserDefaults.standard.set(encoded, forKey:saveKey)
+            // データの保存（変更検知）
+            .onChange(of: tasks) {
+                if let encoded = try? JSONEncoder().encode(tasks) {
+                    UserDefaults.standard.set(encoded, forKey: saveKey)
                 }
             }
         }
     }
-    //タスクを追加する機能
-    func addTask(){
-        tasks.append(newTask)//リストに新しいデータを追加する
-        //appendは末尾に追加するということ
-        newTask = ""//入力欄を空にする
+    
+    // タスクを追加する機能
+    func addTask() {
+        // ただの文字ではなく「Task」というオブジェクトを作って追加する
+        let newTask = Task(title: newTaskTitle, isCompleted: false)
+        tasks.append(newTask)
+        newTaskTitle = "" // 入力欄を空にする
     }
-    //タスクを削除する機能
-    func deleteTask(at offsets: IndexSet){
-        //offsetsは何番目っていうところ。IndexSetは複数を指定できるためIntではない。
+    
+    // タスクを削除する機能
+    func deleteTask(at offsets: IndexSet) {
         tasks.remove(atOffsets: offsets)
     }
 }
+
 #Preview {
     ContentView()
 }
