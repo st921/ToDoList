@@ -11,6 +11,9 @@ struct ContentView: View {
     @State private var tasks: [String] = ["英語の勉強","iOSの勉強","読書"]
     @State private var newTask: String = "" // 新しくタスクを追加する
     
+    //データを保存するためのキー
+    let saveKey = "SavedTasks"
+    
     var body: some View {
         NavigationStack{//データが置き換わった時などの画面遷移が可能
             VStack{//VStackは縦に並べる
@@ -42,6 +45,19 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("ToDoリスト")
+            
+            .onAppear{
+                if let data = UserDefaults.standard.stringArray(forKey: saveKey){
+                    if let decoded = try? JSONDecoder().decode([String].self, from: Data(data.joined().utf8)){
+                        tasks = decoded
+                    }
+                }
+            }
+            .onChange(of: tasks){
+                if let encoded = try? JSONEncoder().encode(tasks){
+                    UserDefaults.standard.set(encoded, forKey:saveKey)
+                }
+            }
         }
     }
     //タスクを追加する機能
