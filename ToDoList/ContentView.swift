@@ -47,14 +47,19 @@ struct ContentView: View {
             .navigationTitle("ToDoリスト")
             
             .onAppear{
-                if let data = UserDefaults.standard.stringArray(forKey: saveKey){
-                    if let decoded = try? JSONDecoder().decode([String].self, from: Data(data.joined().utf8)){
-                        tasks = decoded
+                //保存する箱(UserDefaults)からデータを取り出そうとする
+                if let data = UserDefaults.standard.data(forKey: saveKey){
+                    //データがあればそれをJSONとして解読
+                    if let decoded = try? JSONDecoder().decode([String].self, from:data){
+                        tasks = decoded//復元したデータをtasksに入れる
                     }
                 }
             }
+            //データの保存部分
             .onChange(of: tasks){
+                //tasksの中身に変化があったか監視　↓tasksを保存できる形式に変換(encode)
                 if let encoded = try? JSONEncoder().encode(tasks){
+                    //変換したデータを箱(UserDefaults)に書き込む
                     UserDefaults.standard.set(encoded, forKey:saveKey)
                 }
             }
