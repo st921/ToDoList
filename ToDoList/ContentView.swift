@@ -7,13 +7,46 @@
 
 import SwiftUI
 
-// 1. データの「設計図」を作る
 // 文字(String)だけでなく、IDと完了フラグ(Bool)をセットにする
 // Identifiable: リストで管理しやすくする / Codable: 保存できるようにする / Equatable: 比較できるようにする
 struct Task: Identifiable, Codable, Equatable {
     var id = UUID()         // タスクごとの背番号（自動発行）
     var title: String       // タスクの内容
     var isCompleted: Bool   // 完了したかどうか（true/false）
+}
+
+struct TaskRow: View {
+    @Binding var task: Task
+    
+    var body: some View {
+        HStack{
+            Button(action:{
+                //振動
+                simpleHaptic(style:.medium)
+                //アニメーション
+                withAnimation{
+                    task.isCompleted.toggle()
+                }
+            }){
+                Image(systemName:task.isCompleted ? "checkmark.circle.fill": "circle").foregroundColor(task.isCompleted ? .green: .gray)
+                    .font(.title2)
+            }
+            .buttonStyle(PlainButtonStyle())
+            //タスク名
+            Text(task.title)
+                .font(.system(.body,design:.rounded))
+                .strikethrough(task.isCompleted)
+                .foregroundColor(task.isCompleted ? .gray: .primary)
+            
+            Spacer()
+        }
+        .padding(.vertical,4)
+    }
+    //振動させる
+    func simpleHaptic(style: UIImpactFeedbackGenerator.FeedbackStyle){
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.impactOccurred()
+    }
 }
 
 struct ContentView: View {
@@ -49,27 +82,7 @@ struct ContentView: View {
                 List {
                     // $tasks と書くことで、リストの中でデータを書き換えられるようにする（バインディング）
                     ForEach($tasks) { $task in
-                        HStack {
-                            // 2. タップで完了/未完了を切り替えるボタン
-                            Button(action: {
-                                task.isCompleted.toggle() // trueとfalseを反転させる魔法の命令
-                            }) {
-                                // 完了状態によってアイコンを変える
-                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(task.isCompleted ? .green : .gray)
-                                    .font(.title2)
-                            }
-                            .buttonStyle(PlainButtonStyle()) // リスト全体のタップ判定を防ぐためのおまじない
-
-                            // タスクの文字
-                            Text(task.title)
-                                .font(.system(.body, design: .rounded))
-                                .strikethrough(task.isCompleted) // 完了なら取り消し線をつける
-                                .foregroundColor(task.isCompleted ? .gray : .primary) // 完了なら色を薄くする
-                            
-                            Spacer()
-                        }
-                        .padding(.vertical, 4)
+                        TaskRow(task:$task)
                     }
                     // スワイプで削除する機能
                     .onDelete(perform: deleteTask)
@@ -79,36 +92,48 @@ struct ContentView: View {
             .navigationTitle("ToDoリスト")
             
             // 起動時のデータ読み込み
-            .onAppear {
-                if let data = UserDefaults.standard.data(forKey: saveKey) {
-                    // [String] ではなく [Task] として読み込む
-                    if let decoded = try? JSONDecoder().decode([Task].self, from: data) {
-                        tasks = decoded
-                    }
-                }
-            }
+            .onAppear (perform:loadTasks)
             // データの保存（変更検知）
-            .onChange(of: tasks) {
-                if let encoded = try? JSONEncoder().encode(tasks) {
-                    UserDefaults.standard.set(encoded, forKey: saveKey)
-                }
-            }
+            .onChange(of: tasks){oldValue, newValue in saveTasks(newValue: newValue)}
         }
     }
     
     // タスクを追加する機能
     func addTask() {
-        // ただの文字ではなく「Task」というオブジェクトを作って追加する
-        let newTask = Task(title: newTaskTitle, isCompleted: false)
-        tasks.append(newTask)
-        newTaskTitle = "" // 入力欄を空にする
+            let newTask = Task(title: newTaskTitle, isCompleted: false)
+            // 追加した時も振動させる
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            
+            withAnimation {
+                tasks.append(newTask)
+            }
+            newTaskTitle = ""
+        }
+        
+        func deleteTask(at offsets: IndexSet) {
+            // 削除する時も少し重めの振動を入れる
+            let generator = UIImpactFeedbackGenerator(style: .heavy)
+            generator.impactOccurred()
+            
+            tasks.remove(atOffsets: offsets)
+        }
+        
+        // 保存・読み込み処理
+        func saveTasks(newValue: [Task]) {
+            if let encoded = try? JSONEncoder().encode(tasks) {
+                UserDefaults.standard.set(encoded, forKey: saveKey)
+            }
+        }
+        
+        func loadTasks() {
+            if let data = UserDefaults.standard.data(forKey: saveKey) {
+                if let decoded = try? JSONDecoder().decode([Task].self, from: data) {
+                    tasks = decoded
+                }
+            }
+        }
     }
-    
-    // タスクを削除する機能
-    func deleteTask(at offsets: IndexSet) {
-        tasks.remove(atOffsets: offsets)
-    }
-}
 
 #Preview {
     ContentView()
